@@ -8,9 +8,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
     <style>
         body {
             font-family: 'Outfit', sans-serif;
@@ -36,7 +33,7 @@
         .used-state {
             opacity: 0.5;
             filter: grayscale(80%);
-            pointer-events: none; /* Disable copying if already used */
+            pointer-events: none; 
         }
         #toast {
             visibility: hidden;
@@ -80,27 +77,28 @@
         <span id="toast-message" class="font-medium tracking-wide">Copied!</span>
     </div>
 
-    <script>
-        // ==========================================
-        // 1. FIREBASE CONFIGURATION (UPDATE THIS)
-        // ==========================================
+    <script type="module">
+        // 1. Import Firebase Functions
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+
+        // 2. Firebase Configuration
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_MESSAGING_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "AIzaSyCwL-Q4qNv5mlonWNn4f7I83iN8dXEPvc0",
+            authDomain: "movie-id-16597.firebaseapp.com",
+            databaseURL: "https://movie-id-16597-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "movie-id-16597",
+            storageBucket: "movie-id-16597.firebasestorage.app",
+            messagingSenderId: "425793048957",
+            appId: "1:425793048957:web:b0245440dbe304ce4a7c14",
+            measurementId: "G-ED5BPE39LG"
         };
 
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
 
-        // ==========================================
-        // 2. DEVICE DATA (Constant)
-        // ==========================================
+        // 3. Device Data
         const deviceData = [
             { no: 1, id: "4809e9cb-63c9-4706-924e-0763fe6c4d22", pin: "625017" },
             { no: 2, id: "f446b35d-ebe0-44b2-98e6-1c8b9a656868", pin: "951769" },
@@ -118,9 +116,7 @@
             { no: 14, id: "afa22470-0cf8-4f19-8d34-c0e0f3e1dca2", pin: "525037" }
         ];
 
-        // ==========================================
-        // 3. MMT CLOCK & MIDNIGHT RESET LOGIC
-        // ==========================================
+        // 4. Time and Midnight Reset Logic
         function getMMTDateString() {
             return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Yangon" })).toDateString();
         }
@@ -132,35 +128,30 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // Database References
-        const systemRef = database.ref('system');
-        const stateRef = database.ref('deviceState');
+        const systemDateRef = ref(database, 'system/lastDate');
+        const stateRef = ref(database, 'deviceState');
 
-        // Check for Midnight Reset
-        systemRef.child('lastDate').on('value', (snapshot) => {
+        // Check for new day
+        onValue(systemDateRef, (snapshot) => {
             const dbDate = snapshot.val();
             const currentDate = getMMTDateString();
 
-            // If it's a new day, Reset everything in DB
             if (dbDate !== currentDate) {
                 const freshState = {};
                 deviceData.forEach(d => {
                     freshState[d.no] = { id: false, pin: false };
                 });
                 
-                // Update Database (This will update all connected computers instantly)
-                systemRef.update({ lastDate: currentDate });
-                stateRef.set(freshState);
+                // Update Firebase
+                update(ref(database, 'system'), { lastDate: currentDate });
+                set(stateRef, freshState);
             }
         });
 
-        // ==========================================
-        // 4. REAL-TIME UI SYNC & RENDER
-        // ==========================================
+        // 5. Realtime UI Render Logic
         let currentState = {};
 
-        // Listen for ANY changes in Database (Real-time magic)
-        stateRef.on('value', (snapshot) => {
+        onValue(stateRef, (snapshot) => {
             if (snapshot.exists()) {
                 currentState = snapshot.val();
                 renderList();
@@ -169,13 +160,12 @@
 
         function renderList() {
             const container = document.getElementById('devices-container');
-            container.innerHTML = ''; // Clear loading or previous items
+            container.innerHTML = ''; 
 
             deviceData.forEach(device => {
                 const state = currentState[device.no] || { id: false, pin: false };
                 const isUsed = state.id && state.pin;
 
-                // Status UI
                 const statusIcon = isUsed 
                     ? `<div class="bg-rose-500/20 text-rose-500 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-rose-500/30">
                         <i class="fa-solid fa-lock"></i> USED
@@ -184,7 +174,6 @@
                         <i class="fa-solid fa-satellite-dish fa-fade"></i> ACTIVE
                        </div>`;
 
-                // List Card Template (Horizontal Layout)
                 const cardHTML = `
                     <div class="list-card w-full flex flex-col lg:flex-row items-center gap-4 lg:gap-6 p-4 md:p-5 rounded-2xl ${isUsed ? 'used-state' : 'border-l-4 border-l-cyan-500'}">
                         
@@ -203,13 +192,12 @@
                         <div class="hidden lg:block">${statusIcon}</div>
 
                         <div class="flex flex-col sm:flex-row w-full lg:flex-1 gap-3">
-                            
                             <div class="flex-1 bg-slate-900/50 p-2 pl-4 rounded-xl flex justify-between items-center border border-slate-700/50 hover:border-slate-600 transition-colors">
                                 <div class="truncate mr-3">
                                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">ID Number</p>
                                     <p class="text-sm text-slate-200 font-mono truncate">${device.id}</p>
                                 </div>
-                                <button onclick="copyData(${device.no}, 'id', '${device.id}')" 
+                                <button onclick="window.copyData(${device.no}, 'id', '${device.id}')" 
                                         class="shrink-0 h-10 w-12 rounded-lg ${state.id ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-600 hover:bg-blue-500 text-white'} flex items-center justify-center transition-all active:scale-95">
                                     <i class="fa-solid ${state.id ? 'fa-check' : 'fa-copy'}"></i>
                                 </button>
@@ -220,23 +208,19 @@
                                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Secret PIN</p>
                                     <p class="text-base text-white font-mono font-bold tracking-widest">${device.pin}</p>
                                 </div>
-                                <button onclick="copyData(${device.no}, 'pin', '${device.pin}')" 
+                                <button onclick="window.copyData(${device.no}, 'pin', '${device.pin}')" 
                                         class="shrink-0 h-10 w-12 rounded-lg ${state.pin ? 'bg-emerald-500/20 text-emerald-400' : 'bg-cyan-600 hover:bg-cyan-500 text-white'} flex items-center justify-center transition-all active:scale-95">
                                     <i class="fa-solid ${state.pin ? 'fa-check' : 'fa-copy'}"></i>
                                 </button>
                             </div>
-
                         </div>
                     </div>
                 `;
-                
                 container.insertAdjacentHTML('beforeend', cardHTML);
             });
         }
 
-        // ==========================================
-        // 5. COPY & UPDATE DATABASE
-        // ==========================================
+        // 6. Copy and Database Update
         let toastTimeout;
         function showToast(message) {
             const toast = document.getElementById('toast');
@@ -246,12 +230,13 @@
             toastTimeout = setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        function copyData(deviceNo, type, text) {
+        // Must attach to window because type="module" limits scope
+        window.copyData = function(deviceNo, type, text) {
             navigator.clipboard.writeText(text).then(() => {
                 showToast(`Copied ${type.toUpperCase()} for Device ${deviceNo}`);
                 
-                // Update Firebase (This sends the update to all computers)
-                stateRef.child(deviceNo).update({
+                // Update modular Firebase DB
+                update(ref(database, `deviceState/${deviceNo}`), {
                     [type]: true
                 });
             }).catch(err => console.error('Copy failed:', err));
