@@ -3,31 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Device Manager</title>
+    <title>Pro Device Manager | Sync</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <style>
         body {
-            font-family: 'Space Grotesk', sans-serif;
-            background-color: #0f172a;
-            background-image: radial-gradient(circle at top right, #1e293b, #0f172a);
+            font-family: 'Outfit', sans-serif;
+            background-color: #0b1120;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,0.2) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,0.2) 0, transparent 50%);
             color: #f8fafc;
             min-height: 100vh;
         }
-        .glass-card {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
+        .list-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
         }
-        /* Toast Animation */
+        .list-card:hover {
+            background: rgba(30, 41, 59, 0.7);
+            border-color: rgba(34, 211, 238, 0.3);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.05);
+        }
+        .used-state {
+            opacity: 0.5;
+            filter: grayscale(80%);
+            pointer-events: none; /* Disable copying if already used */
+        }
         #toast {
             visibility: hidden;
             opacity: 0;
             transform: translateY(20px);
-            transition: all 0.3s ease-in-out;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
         }
         #toast.show {
             visibility: visible;
@@ -38,29 +53,54 @@
 </head>
 <body class="p-4 md:p-8">
 
-    <div class="max-w-7xl mx-auto mb-10 text-center">
-        <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-3">
-            <i class="fa-solid fa-server text-cyan-400 mr-2"></i> Device Manager
-        </h1>
-        <p class="text-slate-400 text-sm md:text-base">Manage and copy your device credentials seamlessly.</p>
+    <div class="max-w-5xl mx-auto mb-10 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-bold text-white tracking-wide flex items-center gap-3">
+                <i class="fa-solid fa-server text-cyan-400"></i> Core Devices
+            </h1>
+            <p class="text-slate-400 mt-1 text-sm">Real-time sync across all computers.</p>
+        </div>
         
-        <div class="mt-4 inline-flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-full border border-slate-700 shadow-inner">
+        <div class="inline-flex items-center gap-2 bg-slate-800/80 px-5 py-2.5 rounded-xl border border-slate-700 shadow-lg shadow-black/50">
             <i class="fa-regular fa-clock text-cyan-400 fa-spin-pulse"></i>
-            <span class="text-slate-300 text-sm font-medium">Myanmar Time: </span>
-            <span id="mmt-clock" class="text-cyan-400 font-bold tracking-wider">00:00:00</span>
+            <span class="text-slate-300 font-medium">MMT: </span>
+            <span id="mmt-clock" class="text-cyan-400 font-bold tracking-widest">00:00:00</span>
         </div>
     </div>
 
-    <div id="devices-container" class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div id="devices-container" class="max-w-5xl mx-auto flex flex-col gap-4 pb-20">
+        <div id="loading" class="text-center py-10 text-slate-400">
+            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-cyan-400 mb-3"></i>
+            <p>Connecting to Database...</p>
         </div>
+    </div>
 
-    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-cyan-600 text-white px-6 py-3 rounded-full shadow-lg shadow-cyan-500/30 flex items-center gap-3 z-50">
-        <i class="fa-solid fa-circle-check"></i>
-        <span id="toast-message" class="font-medium text-sm">Copied successfully!</span>
+    <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-cyan-900 text-cyan-100 px-6 py-3 rounded-xl border border-cyan-500/50 shadow-2xl flex items-center gap-3 z-50">
+        <i class="fa-solid fa-check-circle text-cyan-400 text-lg"></i>
+        <span id="toast-message" class="font-medium tracking-wide">Copied!</span>
     </div>
 
     <script>
-        // Device Data Array
+        // ==========================================
+        // 1. FIREBASE CONFIGURATION (UPDATE THIS)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // ==========================================
+        // 2. DEVICE DATA (Constant)
+        // ==========================================
         const deviceData = [
             { no: 1, id: "4809e9cb-63c9-4706-924e-0763fe6c4d22", pin: "625017" },
             { no: 2, id: "f446b35d-ebe0-44b2-98e6-1c8b9a656868", pin: "951769" },
@@ -78,122 +118,114 @@
             { no: 14, id: "afa22470-0cf8-4f19-8d34-c0e0f3e1dca2", pin: "525037" }
         ];
 
-        // State Management variables
-        let appState = JSON.parse(localStorage.getItem('deviceState')) || {};
-        let storedDate = localStorage.getItem('lastMMTDate');
-
-        // Function to get current Myanmar Date String (e.g., "Mon Jun 26 2026")
+        // ==========================================
+        // 3. MMT CLOCK & MIDNIGHT RESET LOGIC
+        // ==========================================
         function getMMTDateString() {
             return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Yangon" })).toDateString();
         }
 
-        // Live Clock Function
         function updateClock() {
             const mmtTime = new Date().toLocaleTimeString("en-US", { timeZone: "Asia/Yangon", hour12: true });
             document.getElementById('mmt-clock').innerText = mmtTime;
         }
+        setInterval(updateClock, 1000);
+        updateClock();
 
-        // Logic to check Midnight Reset
-        function checkAndResetDate() {
-            const currentMMTDate = getMMTDateString();
-            if (!storedDate) {
-                storedDate = currentMMTDate;
-                localStorage.setItem('lastMMTDate', storedDate);
-            } else if (currentMMTDate !== storedDate) {
-                // It's a new day in Myanmar! Reset all usages.
-                appState = {};
-                storedDate = currentMMTDate;
-                localStorage.setItem('deviceState', JSON.stringify(appState));
-                localStorage.setItem('lastMMTDate', storedDate);
-                renderDevices(); // Re-render UI
+        // Database References
+        const systemRef = database.ref('system');
+        const stateRef = database.ref('deviceState');
+
+        // Check for Midnight Reset
+        systemRef.child('lastDate').on('value', (snapshot) => {
+            const dbDate = snapshot.val();
+            const currentDate = getMMTDateString();
+
+            // If it's a new day, Reset everything in DB
+            if (dbDate !== currentDate) {
+                const freshState = {};
+                deviceData.forEach(d => {
+                    freshState[d.no] = { id: false, pin: false };
+                });
+                
+                // Update Database (This will update all connected computers instantly)
+                systemRef.update({ lastDate: currentDate });
+                stateRef.set(freshState);
             }
-        }
+        });
 
-        // Toast Notification Logic
-        let toastTimeout;
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toast-message').innerText = message;
-            toast.classList.add('show');
-            clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => {
-                toast.classList.remove('show');
-            }, 2500);
-        }
+        // ==========================================
+        // 4. REAL-TIME UI SYNC & RENDER
+        // ==========================================
+        let currentState = {};
 
-        // Copy Function
-        function copyData(deviceNo, type, text) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast(`${type.toUpperCase()} for Device ${deviceNo} copied!`);
-                
-                // Update Local Storage State
-                if (!appState[deviceNo]) {
-                    appState[deviceNo] = { id: false, pin: false };
-                }
-                appState[deviceNo][type] = true;
-                localStorage.setItem('deviceState', JSON.stringify(appState));
-                
-                // Refresh UI
-                renderDevices();
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-            });
-        }
+        // Listen for ANY changes in Database (Real-time magic)
+        stateRef.on('value', (snapshot) => {
+            if (snapshot.exists()) {
+                currentState = snapshot.val();
+                renderList();
+            }
+        });
 
-        // Render Function
-        function renderDevices() {
+        function renderList() {
             const container = document.getElementById('devices-container');
-            container.innerHTML = ''; // Clear container
+            container.innerHTML = ''; // Clear loading or previous items
 
             deviceData.forEach(device => {
-                // Get state for this specific device
-                const state = appState[device.no] || { id: false, pin: false };
-                
-                // Device is considered 'Used' ONLY if both ID and PIN are copied
+                const state = currentState[device.no] || { id: false, pin: false };
                 const isUsed = state.id && state.pin;
 
-                // Status Badge HTML
-                const statusHTML = isUsed 
-                    ? `<span class="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border border-rose-500/30">
-                        <i class="fa-solid fa-lock"></i> Used
-                       </span>`
-                    : `<span class="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30">
-                        <i class="fa-solid fa-signal fa-fade" style="--fa-animation-duration: 2s;"></i> Active
-                       </span>`;
+                // Status UI
+                const statusIcon = isUsed 
+                    ? `<div class="bg-rose-500/20 text-rose-500 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-rose-500/30">
+                        <i class="fa-solid fa-lock"></i> USED
+                       </div>`
+                    : `<div class="bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-emerald-500/30">
+                        <i class="fa-solid fa-satellite-dish fa-fade"></i> ACTIVE
+                       </div>`;
 
-                // HTML Template for each Card
+                // List Card Template (Horizontal Layout)
                 const cardHTML = `
-                    <div class="glass-card rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 group ${isUsed ? 'opacity-50 grayscale-[30%]' : ''}">
+                    <div class="list-card w-full flex flex-col lg:flex-row items-center gap-4 lg:gap-6 p-4 md:p-5 rounded-2xl ${isUsed ? 'used-state' : 'border-l-4 border-l-cyan-500'}">
                         
-                        <div class="flex justify-between items-center mb-5 border-b border-slate-700/60 pb-4">
-                            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-mobile-screen text-${isUsed ? 'rose' : 'cyan'}-400"></i> Device ${device.no}
-                            </h2>
-                            ${statusHTML}
+                        <div class="flex items-center justify-between lg:justify-start w-full lg:w-1/4 gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="h-12 w-12 rounded-xl bg-slate-800/80 flex items-center justify-center border border-slate-700 shadow-inner">
+                                   <i class="fa-solid fa-microchip text-xl text-${isUsed ? 'rose' : 'cyan'}-400"></i>
+                                </div>
+                                <div>
+                                   <h3 class="font-bold text-lg text-white">Device ${device.no}</h3>
+                                </div>
+                            </div>
+                            <div class="lg:hidden block">${statusIcon}</div>
                         </div>
                         
-                        <div class="space-y-4">
-                            <div class="bg-slate-800/60 p-3 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
-                                <div class="overflow-hidden pr-3 w-full">
-                                    <p class="text-[10px] text-slate-400 mb-0.5 font-bold uppercase tracking-widest">Device ID</p>
-                                    <p class="text-sm text-slate-200 truncate font-mono">${device.id}</p>
+                        <div class="hidden lg:block">${statusIcon}</div>
+
+                        <div class="flex flex-col sm:flex-row w-full lg:flex-1 gap-3">
+                            
+                            <div class="flex-1 bg-slate-900/50 p-2 pl-4 rounded-xl flex justify-between items-center border border-slate-700/50 hover:border-slate-600 transition-colors">
+                                <div class="truncate mr-3">
+                                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">ID Number</p>
+                                    <p class="text-sm text-slate-200 font-mono truncate">${device.id}</p>
                                 </div>
                                 <button onclick="copyData(${device.no}, 'id', '${device.id}')" 
-                                        class="shrink-0 ${state.id ? 'bg-slate-700 text-emerald-400' : 'bg-blue-600 hover:bg-blue-500 text-white'} w-10 h-10 rounded-lg flex items-center justify-center transition-all active:scale-90 shadow-lg">
-                                    <i class="fa-solid ${state.id ? 'fa-check-double' : 'fa-copy'}"></i>
+                                        class="shrink-0 h-10 w-12 rounded-lg ${state.id ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-600 hover:bg-blue-500 text-white'} flex items-center justify-center transition-all active:scale-95">
+                                    <i class="fa-solid ${state.id ? 'fa-check' : 'fa-copy'}"></i>
                                 </button>
                             </div>
 
-                            <div class="bg-slate-800/60 p-3 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
-                                <div class="w-full">
-                                    <p class="text-[10px] text-slate-400 mb-0.5 font-bold uppercase tracking-widest">Secret PIN</p>
-                                    <p class="text-lg text-white font-mono tracking-[0.2em] font-bold">${device.pin}</p>
+                            <div class="sm:w-48 bg-slate-900/50 p-2 pl-4 rounded-xl flex justify-between items-center border border-slate-700/50 hover:border-slate-600 transition-colors">
+                                <div>
+                                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Secret PIN</p>
+                                    <p class="text-base text-white font-mono font-bold tracking-widest">${device.pin}</p>
                                 </div>
                                 <button onclick="copyData(${device.no}, 'pin', '${device.pin}')" 
-                                        class="shrink-0 ${state.pin ? 'bg-slate-700 text-emerald-400' : 'bg-cyan-600 hover:bg-cyan-500 text-white'} w-10 h-10 rounded-lg flex items-center justify-center transition-all active:scale-90 shadow-lg">
-                                    <i class="fa-solid ${state.pin ? 'fa-check-double' : 'fa-copy'}"></i>
+                                        class="shrink-0 h-10 w-12 rounded-lg ${state.pin ? 'bg-emerald-500/20 text-emerald-400' : 'bg-cyan-600 hover:bg-cyan-500 text-white'} flex items-center justify-center transition-all active:scale-95">
+                                    <i class="fa-solid ${state.pin ? 'fa-check' : 'fa-copy'}"></i>
                                 </button>
                             </div>
+
                         </div>
                     </div>
                 `;
@@ -202,16 +234,28 @@
             });
         }
 
-        // Initialization
-        checkAndResetDate();
-        renderDevices();
-        updateClock();
+        // ==========================================
+        // 5. COPY & UPDATE DATABASE
+        // ==========================================
+        let toastTimeout;
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => toast.classList.remove('show'), 2000);
+        }
 
-        // Check Midnight Reset & Update Clock every second
-        setInterval(() => {
-            updateClock();
-            checkAndResetDate();
-        }, 1000);
+        function copyData(deviceNo, type, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(`Copied ${type.toUpperCase()} for Device ${deviceNo}`);
+                
+                // Update Firebase (This sends the update to all computers)
+                stateRef.child(deviceNo).update({
+                    [type]: true
+                });
+            }).catch(err => console.error('Copy failed:', err));
+        }
 
     </script>
 </body>
