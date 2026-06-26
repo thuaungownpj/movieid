@@ -78,28 +78,14 @@
     </div>
 
     <script type="module">
-        // 1. Import Firebase Functions
+        // Import Firebase Functions
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
         import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 
-        // 2. Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCwL-Q4qNv5mlonWNn4f7I83iN8dXEPvc0",
-            authDomain: "movie-id-16597.firebaseapp.com",
-            databaseURL: "https://movie-id-16597-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "movie-id-16597",
-            storageBucket: "movie-id-16597.firebasestorage.app",
-            messagingSenderId: "425793048957",
-            appId: "1:425793048957:web:b0245440dbe304ce4a7c14",
-            measurementId: "G-ED5BPE39LG"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // 3. Device Data
-        const deviceData = [
+        // =========================================================================
+        // ⭐️ ၁။ ဒီနေရာ တစ်နေရာတည်းမှာပဲ Device အသစ်များကို အလွယ်တကူ ထပ်တိုးနိုင်ပါပြီ ⭐️
+        // =========================================================================
+        const DEVICE_LIST = [
             { no: 1, id: "4809e9cb-63c9-4706-924e-0763fe6c4d22", pin: "625017" },
             { no: 2, id: "f446b35d-ebe0-44b2-98e6-1c8b9a656868", pin: "951769" },
             { no: 3, id: "43e69870-9b7f-44b9-bd93-0197c8d54d9a", pin: "311096" },
@@ -114,9 +100,32 @@
             { no: 12, id: "4280dec9-fc0a-4d1f-89bc-107d31ab3c5c", pin: "928587" },
             { no: 13, id: "68f2ba5c-02b3-4870-a30d-4aa503c59663", pin: "310087" },
             { no: 14, id: "afa22470-0cf8-4f19-8d34-c0e0f3e1dca2", pin: "525037" }
+            // ဥပမာ - အသစ်ထပ်တိုးချင်ရင် အောက်ကလို ဆက်ရေးသွားရုံပါပဲ (ကော်မာခံဖို့ မမေ့ပါနဲ့)
+            // , { no: 15, id: "your-new-id", pin: "123456" }
         ];
 
-        // 4. Time and Midnight Reset Logic
+
+        // ==========================================
+        // ၂။ Firebase Configuration
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCwL-Q4qNv5mlonWNn4f7I83iN8dXEPvc0",
+            authDomain: "movie-id-16597.firebaseapp.com",
+            databaseURL: "https://movie-id-16597-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "movie-id-16597",
+            storageBucket: "movie-id-16597.firebasestorage.app",
+            messagingSenderId: "425793048957",
+            appId: "1:425793048957:web:b0245440dbe304ce4a7c14",
+            measurementId: "G-ED5BPE39LG"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+
+        // ==========================================
+        // ၃။ MMT Clock & Smart Midnight Reset
+        // ==========================================
         function getMMTDateString() {
             return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Yangon" })).toDateString();
         }
@@ -131,38 +140,43 @@
         const systemDateRef = ref(database, 'system/lastDate');
         const stateRef = ref(database, 'deviceState');
 
-        // Check for new day
+        // Check for new day & Auto-reset
         onValue(systemDateRef, (snapshot) => {
             const dbDate = snapshot.val();
             const currentDate = getMMTDateString();
 
             if (dbDate !== currentDate) {
                 const freshState = {};
-                deviceData.forEach(d => {
+                DEVICE_LIST.forEach(d => {
                     freshState[d.no] = { id: false, pin: false };
                 });
                 
-                // Update Firebase
                 update(ref(database, 'system'), { lastDate: currentDate });
                 set(stateRef, freshState);
             }
         });
 
-        // 5. Realtime UI Render Logic
+
+        // ==========================================
+        // ၄။ Real-time UI Render (Auto-Detects New Devices)
+        // ==========================================
         let currentState = {};
 
         onValue(stateRef, (snapshot) => {
             if (snapshot.exists()) {
                 currentState = snapshot.val();
-                renderList();
+            } else {
+                currentState = {}; // Initial state if DB is completely empty
             }
+            renderList();
         });
 
         function renderList() {
             const container = document.getElementById('devices-container');
             container.innerHTML = ''; 
 
-            deviceData.forEach(device => {
+            DEVICE_LIST.forEach(device => {
+                // အကယ်၍ Device အသစ်ထည့်လိုက်လို့ Database ထဲမှာ မရှိသေးရင်တောင် Auto အလုပ်လုပ်အောင် ပြင်ပေးထားပါတယ်
                 const state = currentState[device.no] || { id: false, pin: false };
                 const isUsed = state.id && state.pin;
 
@@ -220,7 +234,10 @@
             });
         }
 
-        // 6. Copy and Database Update
+
+        // ==========================================
+        // ၅။ Copy & Database Update
+        // ==========================================
         let toastTimeout;
         function showToast(message) {
             const toast = document.getElementById('toast');
@@ -230,12 +247,11 @@
             toastTimeout = setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        // Must attach to window because type="module" limits scope
         window.copyData = function(deviceNo, type, text) {
             navigator.clipboard.writeText(text).then(() => {
                 showToast(`Copied ${type.toUpperCase()} for Device ${deviceNo}`);
                 
-                // Update modular Firebase DB
+                // Update Firebase immediately
                 update(ref(database, `deviceState/${deviceNo}`), {
                     [type]: true
                 });
