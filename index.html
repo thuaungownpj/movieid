@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Device Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #0f172a;
+            background-image: radial-gradient(circle at top right, #1e293b, #0f172a);
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        /* Toast Animation */
+        #toast {
+            visibility: hidden;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease-in-out;
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto mb-10 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-3">
+            <i class="fa-solid fa-server text-cyan-400 mr-2"></i> Device Manager
+        </h1>
+        <p class="text-slate-400 text-sm md:text-base">Manage and copy your device credentials seamlessly.</p>
+        
+        <div class="mt-4 inline-flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-full border border-slate-700 shadow-inner">
+            <i class="fa-regular fa-clock text-cyan-400 fa-spin-pulse"></i>
+            <span class="text-slate-300 text-sm font-medium">Myanmar Time: </span>
+            <span id="mmt-clock" class="text-cyan-400 font-bold tracking-wider">00:00:00</span>
+        </div>
+    </div>
+
+    <div id="devices-container" class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        </div>
+
+    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-cyan-600 text-white px-6 py-3 rounded-full shadow-lg shadow-cyan-500/30 flex items-center gap-3 z-50">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toast-message" class="font-medium text-sm">Copied successfully!</span>
+    </div>
+
+    <script>
+        // Device Data Array
+        const deviceData = [
+            { no: 1, id: "4809e9cb-63c9-4706-924e-0763fe6c4d22", pin: "625017" },
+            { no: 2, id: "f446b35d-ebe0-44b2-98e6-1c8b9a656868", pin: "951769" },
+            { no: 3, id: "43e69870-9b7f-44b9-bd93-0197c8d54d9a", pin: "311096" },
+            { no: 4, id: "f446b35d-ebe0-44b2-98e6-1c8b9a656868", pin: "951769" },
+            { no: 5, id: "ea02cab9-6166-4297-92d0-da3801233a7d", pin: "887393" },
+            { no: 6, id: "3490bc64-7be0-45ad-9902-30466c37737a", pin: "143214" },
+            { no: 7, id: "cbe1db10-1e7f-4f97-afa1-a58f7b3c4cbe", pin: "294469" },
+            { no: 8, id: "f70b3bc9-35cc-4ff9-8205-a1e37e836642", pin: "296884" },
+            { no: 9, id: "018d2907-b5b9-49bc-a637-cf69a371307d", pin: "696611" },
+            { no: 10, id: "c461cd75-5337-4996-8b81-5a1bc489a0fa", pin: "123009" },
+            { no: 11, id: "24220e80-903f-47e6-8819-6f0e3efd8037", pin: "296524" },
+            { no: 12, id: "4280dec9-fc0a-4d1f-89bc-107d31ab3c5c", pin: "928587" },
+            { no: 13, id: "68f2ba5c-02b3-4870-a30d-4aa503c59663", pin: "310087" },
+            { no: 14, id: "afa22470-0cf8-4f19-8d34-c0e0f3e1dca2", pin: "525037" }
+        ];
+
+        // State Management variables
+        let appState = JSON.parse(localStorage.getItem('deviceState')) || {};
+        let storedDate = localStorage.getItem('lastMMTDate');
+
+        // Function to get current Myanmar Date String (e.g., "Mon Jun 26 2026")
+        function getMMTDateString() {
+            return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Yangon" })).toDateString();
+        }
+
+        // Live Clock Function
+        function updateClock() {
+            const mmtTime = new Date().toLocaleTimeString("en-US", { timeZone: "Asia/Yangon", hour12: true });
+            document.getElementById('mmt-clock').innerText = mmtTime;
+        }
+
+        // Logic to check Midnight Reset
+        function checkAndResetDate() {
+            const currentMMTDate = getMMTDateString();
+            if (!storedDate) {
+                storedDate = currentMMTDate;
+                localStorage.setItem('lastMMTDate', storedDate);
+            } else if (currentMMTDate !== storedDate) {
+                // It's a new day in Myanmar! Reset all usages.
+                appState = {};
+                storedDate = currentMMTDate;
+                localStorage.setItem('deviceState', JSON.stringify(appState));
+                localStorage.setItem('lastMMTDate', storedDate);
+                renderDevices(); // Re-render UI
+            }
+        }
+
+        // Toast Notification Logic
+        let toastTimeout;
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2500);
+        }
+
+        // Copy Function
+        function copyData(deviceNo, type, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(`${type.toUpperCase()} for Device ${deviceNo} copied!`);
+                
+                // Update Local Storage State
+                if (!appState[deviceNo]) {
+                    appState[deviceNo] = { id: false, pin: false };
+                }
+                appState[deviceNo][type] = true;
+                localStorage.setItem('deviceState', JSON.stringify(appState));
+                
+                // Refresh UI
+                renderDevices();
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
+        }
+
+        // Render Function
+        function renderDevices() {
+            const container = document.getElementById('devices-container');
+            container.innerHTML = ''; // Clear container
+
+            deviceData.forEach(device => {
+                // Get state for this specific device
+                const state = appState[device.no] || { id: false, pin: false };
+                
+                // Device is considered 'Used' ONLY if both ID and PIN are copied
+                const isUsed = state.id && state.pin;
+
+                // Status Badge HTML
+                const statusHTML = isUsed 
+                    ? `<span class="bg-rose-500/20 text-rose-400 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border border-rose-500/30">
+                        <i class="fa-solid fa-lock"></i> Used
+                       </span>`
+                    : `<span class="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30">
+                        <i class="fa-solid fa-signal fa-fade" style="--fa-animation-duration: 2s;"></i> Active
+                       </span>`;
+
+                // HTML Template for each Card
+                const cardHTML = `
+                    <div class="glass-card rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 group ${isUsed ? 'opacity-50 grayscale-[30%]' : ''}">
+                        
+                        <div class="flex justify-between items-center mb-5 border-b border-slate-700/60 pb-4">
+                            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-mobile-screen text-${isUsed ? 'rose' : 'cyan'}-400"></i> Device ${device.no}
+                            </h2>
+                            ${statusHTML}
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div class="bg-slate-800/60 p-3 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                <div class="overflow-hidden pr-3 w-full">
+                                    <p class="text-[10px] text-slate-400 mb-0.5 font-bold uppercase tracking-widest">Device ID</p>
+                                    <p class="text-sm text-slate-200 truncate font-mono">${device.id}</p>
+                                </div>
+                                <button onclick="copyData(${device.no}, 'id', '${device.id}')" 
+                                        class="shrink-0 ${state.id ? 'bg-slate-700 text-emerald-400' : 'bg-blue-600 hover:bg-blue-500 text-white'} w-10 h-10 rounded-lg flex items-center justify-center transition-all active:scale-90 shadow-lg">
+                                    <i class="fa-solid ${state.id ? 'fa-check-double' : 'fa-copy'}"></i>
+                                </button>
+                            </div>
+
+                            <div class="bg-slate-800/60 p-3 rounded-xl flex justify-between items-center border border-slate-700/50 hover:bg-slate-800 transition-colors">
+                                <div class="w-full">
+                                    <p class="text-[10px] text-slate-400 mb-0.5 font-bold uppercase tracking-widest">Secret PIN</p>
+                                    <p class="text-lg text-white font-mono tracking-[0.2em] font-bold">${device.pin}</p>
+                                </div>
+                                <button onclick="copyData(${device.no}, 'pin', '${device.pin}')" 
+                                        class="shrink-0 ${state.pin ? 'bg-slate-700 text-emerald-400' : 'bg-cyan-600 hover:bg-cyan-500 text-white'} w-10 h-10 rounded-lg flex items-center justify-center transition-all active:scale-90 shadow-lg">
+                                    <i class="fa-solid ${state.pin ? 'fa-check-double' : 'fa-copy'}"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.insertAdjacentHTML('beforeend', cardHTML);
+            });
+        }
+
+        // Initialization
+        checkAndResetDate();
+        renderDevices();
+        updateClock();
+
+        // Check Midnight Reset & Update Clock every second
+        setInterval(() => {
+            updateClock();
+            checkAndResetDate();
+        }, 1000);
+
+    </script>
+</body>
+</html>
